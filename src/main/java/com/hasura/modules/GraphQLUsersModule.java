@@ -1,9 +1,8 @@
 package com.hasura.modules;
 
-import com.fasterxml.jackson.core.JsonProcessingException; // Import for ObjectMapper exception
-import com.fasterxml.jackson.core.type.TypeReference; // Import for TypeReference
-import com.fasterxml.jackson.databind.ObjectMapper; // Import for ObjectMapper
-import com.github.javafaker.Faker;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hasura.config.global.APIsGlobalConfigs;
 import com.hasura.config.graphql.GraphQLUsersConfig;
 import com.hasura.pojos.response.GraphQLResponsePayload;
@@ -15,61 +14,64 @@ import com.hasura.utils.jsonToPojo.JsonUtils;
 import io.restassured.response.Response;
 import org.jetbrains.annotations.NotNull;
 
+/**
+ * Module responsible for handling GraphQL operations specifically related to Users
+ * and the creation of Todos *through* the user context (as an authenticated user).
+ * It manages its own response objects and dynamic data relevant only to User queries/mutations.
+ */
 public class GraphQLUsersModule {
 
-    private static final Faker faker = new Faker();
-    private static final ObjectMapper objectMapper = new ObjectMapper(); // Initialize ObjectMapper once
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    // CORRECTED: Generic type for actualTodoMutationResponse to reflect the expected data structure
+    // Response objects specific to Users module operations
     public static GraphQLResponsePayload<GraphQLResponsePayload.UsersQueryData> actualUsersResponse;
-    public static GraphQLResponsePayload<GraphQLResponsePayload.TodoMutationData> actualTodoMutationResponse; // Changed to TodoMutationData
+    public static GraphQLResponsePayload<GraphQLResponsePayload.TodoMutationData> actualTodoMutationResponse;
 
-    // Dynamic data holders
+    // Dynamic data specific to Users module operations
     public static int dynamicLimit;
     public static String dynamicTodoTitle;
     public static Boolean dynamicTodoIsPublic;
 
-    // This POJO will hold the expected data for the 'returning' object from the mutation response
+    // Expected data POJO for validating the Create_Todo mutation response
     public static GraphQLResponsePayload.InsertTodoReturning expectedTodoReturningData;
 
     /**
-     * Sends a GraphQL request based on the provided scenario name.
-     * Data like 'limit', 'title', 'is_public' are now dynamic.
+     * Sends a GraphQL request based on the provided scenario name, specific to user operations.
+     * Dynamic data like 'limit', 'title', 'is_public' are handled here.
+     *
      * @param scenarioName The name of the GraphQL scenario to execute.
      */
     public static void sendGraphQLRequestWithScenarioName(@NotNull String scenarioName) {
         String graphqlQuery;
         String variablesJson = null;
 
-        // Reset response objects at the start of each request
+        // Reset response objects at the start of each request for this module
         actualUsersResponse = null;
         actualTodoMutationResponse = null;
-        expectedTodoReturningData = null; // Reset this too, it will be recreated for Create_Todo
+        expectedTodoReturningData = null;
 
         switch (scenarioName) {
             case GraphQLUsersConfig.FETCH_USERS_WITH_TODOS_SCENARIO:
                 graphqlQuery = GraphQLUsersConfig.FETCH_USERS_WITH_TODOS_QUERY;
                 QueryUsersVariables usersVariables = new QueryUsersVariables();
-                usersVariables.setLimit(dynamicLimit); // Use the dynamic limit
+                usersVariables.setLimit(dynamicLimit);
                 variablesJson = JsonUtils.objectToJsonString(usersVariables);
                 break;
 
             case GraphQLUsersConfig.FETCH_USERS_ONLY_SCENARIO:
                 graphqlQuery = GraphQLUsersConfig.FETCH_USERS_ONLY_QUERY;
-                // No variables for this specific query
                 break;
 
             case GraphQLUsersConfig.CREATE_TODO_SCENARIO:
                 graphqlQuery = GraphQLUsersConfig.INSERT_TODO_MUTATION;
                 TodosInsertInput todoInput = new TodosInsertInput();
-                todoInput.setTitle(dynamicTodoTitle); // Use the dynamic title
-                todoInput.setIs_public(dynamicTodoIsPublic); // Use the dynamic is_public
+                todoInput.setTitle(dynamicTodoTitle);
+                todoInput.setIs_public(dynamicTodoIsPublic);
 
                 InsertTodoMutationVariables mutationVariables = new InsertTodoMutationVariables();
                 mutationVariables.setTodo_data(todoInput);
                 variablesJson = JsonUtils.objectToJsonString(mutationVariables);
 
-                // Initialize and populate expectedTodoReturningData based on input
                 expectedTodoReturningData = new GraphQLResponsePayload.InsertTodoReturning();
                 expectedTodoReturningData.setTitle(dynamicTodoTitle);
                 expectedTodoReturningData.setIsPublic(dynamicTodoIsPublic);
@@ -78,47 +80,49 @@ public class GraphQLUsersModule {
                 break;
 
             default:
-                throw new IllegalArgumentException("Unknown GraphQL scenario name: " + scenarioName);
+                throw new IllegalArgumentException("Unknown GraphQL Users scenario name: " + scenarioName);
         }
-
         Response response = RestAssuredApiCall.postGraphQLRequest("", graphqlQuery, variablesJson);
         APIsGlobalConfigs.HTTP_STATUS_CODE = response.getStatusCode();
-        String responseBody = response.getBody().asString(); // Get response body as string for ObjectMapper
+        String responseBody = response.getBody().asString();
 
-        // Deserialize the full GraphQL response based on the scenario
         try {
-            if (scenarioName.equals(GraphQLUsersConfig.FETCH_USERS_WITH_TODOS_SCENARIO) ||
-                    scenarioName.equals(GraphQLUsersConfig.FETCH_USERS_ONLY_SCENARIO)) {
-                // Use TypeReference for correct generic deserialization
-                actualUsersResponse = objectMapper.readValue(responseBody,
-                        new TypeReference<GraphQLResponsePayload<GraphQLResponsePayload.UsersQueryData>>() {});
+            // Using a switch statement for deserialization based on scenarioName
+            switch (scenarioName) {
+                case GraphQLUsersConfig.FETCH_USERS_WITH_TODOS_SCENARIO:
+                case GraphQLUsersConfig.FETCH_USERS_ONLY_SCENARIO:
+                    actualUsersResponse = objectMapper.readValue(responseBody,
+                            new TypeReference<GraphQLResponsePayload<GraphQLResponsePayload.UsersQueryData>>() {
+                            });
+                    break;
 
-            } else if (scenarioName.equals(GraphQLUsersConfig.CREATE_TODO_SCENARIO)) {
-                // Correctly deserialize to the type that matches the 'data' field of the mutation response
-                actualTodoMutationResponse = objectMapper.readValue(responseBody,
-                        new TypeReference<GraphQLResponsePayload<GraphQLResponsePayload.TodoMutationData>>() {});
+                case GraphQLUsersConfig.CREATE_TODO_SCENARIO:
+                    actualTodoMutationResponse = objectMapper.readValue(responseBody,
+                            new TypeReference<GraphQLResponsePayload<GraphQLResponsePayload.TodoMutationData>>() {
+                            });
 
-                // Extract created TODO ID for chaining and update expected data
-                if (actualTodoMutationResponse != null && actualTodoMutationResponse.getData() != null) {
-                    // Access the insertTodos object via the TodoMutationData
-                    GraphQLResponsePayload.InsertTodos mutationData = actualTodoMutationResponse.getData().getInsertTodos();
-                    if (mutationData != null && mutationData.getReturning() != null && !mutationData.getReturning().isEmpty()) {
-                        GraphQLResponsePayload.InsertTodoReturning createdTodo = mutationData.getReturning().get(0);
-                        APIsGlobalConfigs.RESPONSE_TODO_ID = String.valueOf(createdTodo.getId());
-                        System.out.println("GraphQL Created TODO ID: " + APIsGlobalConfigs.RESPONSE_TODO_ID);
-                        // Update expected ID, as it's generated by the server
-                        expectedTodoReturningData.setId(createdTodo.getId());
+                    if (actualTodoMutationResponse != null && actualTodoMutationResponse.getData() != null) {
+                        GraphQLResponsePayload.InsertTodos mutationData = actualTodoMutationResponse.getData().getInsertTodos();
+                        if (mutationData != null && mutationData.getReturning() != null && !mutationData.getReturning().isEmpty()) {
+                            GraphQLResponsePayload.InsertTodoReturning createdTodo = mutationData.getReturning().get(0);
+                            APIsGlobalConfigs.RESPONSE_TODO_ID = String.valueOf(createdTodo.getId());
+                            System.out.println("GraphQL Created TODO ID: " + APIsGlobalConfigs.RESPONSE_TODO_ID);
+                            expectedTodoReturningData.setId(createdTodo.getId());
+                        }
                     }
-                }
+                    break;
+
+                default:
+                    System.err.println("No specific deserialization logic for scenario: " + scenarioName);
+                    break;
             }
         } catch (JsonProcessingException e) {
-            System.err.println("Failed to deserialize GraphQL response for scenario " + scenarioName + ": " + e.getMessage());
-            e.printStackTrace(); // Print stack trace for debugging
-            // Ensure response objects are null on failure
+            System.err.println("Failed to deserialize GraphQL Users response for scenario " + scenarioName + ": " + e.getMessage());
+            e.printStackTrace();
             actualUsersResponse = null;
             actualTodoMutationResponse = null;
-        } catch (Exception e) { // Catch any other potential exceptions during processing
-            System.err.println("An unexpected error occurred during GraphQL response processing for scenario " + scenarioName + ": " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("An unexpected error occurred during GraphQL Users response processing for scenario " + scenarioName + ": " + e.getMessage());
             e.printStackTrace();
             actualUsersResponse = null;
             actualTodoMutationResponse = null;

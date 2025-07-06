@@ -1,21 +1,25 @@
 package com.hasura.pojos.response;
 
-// --- IMPORTANT: Ensure these are from com.fasterxml.jackson.annotation ---
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-// -------------------------------------------------------------------------
+import lombok.Data;
 
-import lombok.Data; // Assuming you have Lombok setup
 import java.util.List;
 import java.util.Map;
 
-// Generic GraphQL response wrapper
+/**
+ * Generic POJO to represent the top-level structure of a GraphQL response.
+ * It contains a 'data' field (which can be of various types) and an optional 'errors' field.
+ */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class GraphQLResponsePayload<T> {
     private T data;
     private List<GraphQLError> errors;
 
+    /**
+     * Represents a single error object within the 'errors' array of a GraphQL response.
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class GraphQLError {
@@ -25,18 +29,25 @@ public class GraphQLResponsePayload<T> {
         private Map<String, Object> extensions;
     }
 
-    // --- Specific POJOs for the 'data' field ---
+    // --- POJOs for the 'data' field of *Users-related* queries/mutations ---
 
-    // For fetching users (query)
+    /**
+     * Represents a single Todo object as part of a User's todos list.
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class UserTodo {
         private int id;
         private String title;
-        @JsonProperty("is_completed") // Add @JsonProperty for underscore-to-camelCase mapping
-        private Boolean isCompleted; // Use Boolean for nullable fields
+        @JsonProperty("is_completed")
+        private Boolean isCompleted;
+        @JsonProperty("is_public")
+        private Boolean isPublic;
     }
 
+    /**
+     * Represents a single User object from a GraphQL query.
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class User {
@@ -45,36 +56,78 @@ public class GraphQLResponsePayload<T> {
         private List<UserTodo> todos;
     }
 
+    /**
+     * Represents the 'data' payload for GraphQL queries that return a list of 'users'.
+     * E.g., `{"data": {"users": [...]}}`
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class UsersQueryData { // Represents { "users": [...] }
+    public static class UsersQueryData {
         private List<User> users;
     }
 
-    // --- Specific POJOs for the 'data' field of the Todo Mutation ---
-
+    /**
+     * Represents the 'returning' array object within an insert mutation response.
+     * E.g., `{"returning": [{"id": 1, "title": "...", "is_public": true, "is_completed": false}]}`
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class InsertTodoReturning { // Represents an individual object inside 'returning' array
+    public static class InsertTodoReturning {
         private int id;
         private String title;
-        @JsonProperty("is_public") // Maps "is_public" from JSON to isPublic in Java
-        private Boolean isPublic; // Use Boolean for nullable boolean or if server can send null
-        @JsonProperty("is_completed") // Maps "is_completed" from JSON to isCompleted in Java
-        private Boolean isCompleted; // Use Boolean for nullable boolean
+        @JsonProperty("is_public")
+        private Boolean isPublic;
+        @JsonProperty("is_completed")
+        private Boolean isCompleted;
     }
 
+    /**
+     * Represents the `insert_todos` object within the data payload of a todo mutation.
+     * E.g., `{"insert_todos": {"returning": [...]}}`
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class InsertTodos { // This represents the 'insert_todos' object: { "returning": [...] }
+    public static class InsertTodos {
         private List<InsertTodoReturning> returning;
     }
 
-    // This class represents the ENTIRE 'data' object for the todo mutation: { "insert_todos": {...} }
+    /**
+     * Represents the entire 'data' payload for a todo *mutation* response.
+     * E.g., `{"data": {"insert_todos": {...}}}`
+     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class TodoMutationData { // Renamed from InsertTodosMutationData for clarity of purpose
-        @JsonProperty("insert_todos") // Maps "insert_todos" from JSON to insertTodos in Java
+    public static class TodoMutationData {
+        @JsonProperty("insert_todos")
         private InsertTodos insertTodos;
+    }
+
+
+    // --- POJOs for the 'data' field of *Todos-related* queries ---
+
+    /**
+     * Represents a single Todo object from a GraphQL query when fetching todos directly.
+     * This might include user details if the query joins them.
+     */
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Todo {
+        private int id;
+        private String title;
+        @JsonProperty("is_completed")
+        private Boolean isCompleted;
+        @JsonProperty("is_public")
+        private Boolean isPublic;
+        private User user; // Include user info for the todo
+    }
+
+    /**
+     * Represents the 'data' payload for GraphQL queries that return a list of 'todos'.
+     * E.g., `{"data": {"todos": [...]}}`
+     */
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TodosQueryData {
+        private List<Todo> todos;
     }
 }

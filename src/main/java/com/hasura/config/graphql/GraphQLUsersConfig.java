@@ -1,10 +1,15 @@
 package com.hasura.config.graphql;
 
+/**
+ * Configuration class for GraphQL User-related queries/mutations and scenarios.
+ * This class should only contain constants related to user operations and
+ * user-initiated todo creations.
+ */
 public class GraphQLUsersConfig {
     //############### Scenario Name ##############################################
     public static final String FETCH_USERS_WITH_TODOS_SCENARIO = "Fetch_Users_With_Todos";
     public static final String CREATE_TODO_SCENARIO = "Create_Todo";
-    public static final String FETCH_USERS_ONLY_SCENARIO = "Fetch_Users_Only"; // For your second query example
+    public static final String FETCH_USERS_ONLY_SCENARIO = "Fetch_Users_Only";
 
     //########################### GraphQL Queries/Mutations #####################################
 
